@@ -85,6 +85,7 @@
     transition: background .25s, color .25s, transform .25s;
   }
   .btn:hover { background: rgba(211, 172, 82, 0.14); transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
   .btn-solid { background: linear-gradient(180deg, var(--gold-hi), var(--gold)); color: #0A2A21; border-color: var(--gold-hi); }
   .btn-solid:hover { background: linear-gradient(180deg, #FFF0BF, var(--gold-hi)); }
 
@@ -186,6 +187,10 @@
   }
   textarea { min-height: 110px; resize: vertical; }
   input::placeholder, textarea::placeholder { color: rgba(180, 194, 182, 0.6); }
+  .wish-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .wish-actions .btn { flex: 1 1 auto; padding: 14px 16px; }
+  .wish-hint { margin: 12px 0 0; font-family: var(--f-label); font-size: 0.78rem; line-height: 1.5; color: var(--muted); }
+  .wish-hint-ar { margin: 4px 0 0; font-size: 0.9rem; line-height: 1.5; color: var(--muted); }
   .wish-out { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
   .wish-out p { margin: 0; flex-basis: 100%; }
 
@@ -348,16 +353,23 @@
       <div class="mem-card" id="wish-card">
         <div>
           <h3>A note for us</h3>
-          <p>Write a few words and send them directly to us on WhatsApp.</p>
+          <p>Write a few words—save them privately in our wedding guest book, or send them directly to the groom on WhatsApp.</p>
+          <p class="ar" lang="ar" dir="rtl" style="font-size:0.95rem;color:var(--muted);margin-bottom:18px;">اكتبوا لنا كلمة جميلة.. احفظوها في دفتر التهاني الخاص بنا، أو أرسلوها مباشرة إلى العريس على واتساب</p>
           <form id="wish-form">
-            <label class="field"><span class="label">Your name</span><input id="wish-name" type="text" required placeholder="Your name" autocomplete="name"></label>
-            <label class="field"><span class="label">Your message</span><textarea id="wish-msg" required placeholder="Write us something to remember"></textarea></label>
-            <button class="btn btn-solid" type="submit">Prepare my wish</button>
+            <label class="field"><span class="label">Your name</span><input id="wish-name" type="text" required maxlength="60" placeholder="Your name" autocomplete="name"></label>
+            <label class="field"><span class="label">Your message</span><textarea id="wish-msg" required maxlength="1500" placeholder="Write us something to remember"></textarea></label>
+            <div class="wish-actions">
+              <button id="wish-save" class="btn btn-solid" type="submit">Save to Guest Book</button>
+              <button id="wish-wa-btn" class="btn" type="button">WhatsApp the Groom <span aria-hidden="true">↗</span></button>
+            </div>
+            <p class="wish-hint"><strong>Guest Book</strong> saves your note privately for us to read later—it will not be sent via WhatsApp. <strong>WhatsApp</strong> sends your message directly to the groom.</p>
+            <p class="wish-hint-ar ar" lang="ar" dir="rtl">حفظ في دفتر التهاني يحتفظ بكلمتكم لدينا فقط دون إرسالها، بينما زر واتساب يرسل الرسالة مباشرة إلى العريس.</p>
+            <p id="wish-status" style="margin-top:12px;font-size:0.92rem;color:var(--gold-hi);" role="status" aria-live="polite" hidden></p>
           </form>
         </div>
         <div id="wish-out" class="wish-out" hidden>
-          <p>Ready! Tap below to open WhatsApp with your message filled in.</p>
-          <a id="wish-wa" class="btn btn-solid" href="https://wa.me/201026710353" target="_blank" rel="noopener noreferrer">Send on WhatsApp <span aria-hidden="true">↗</span></a>
+          <p>Ready to send to the groom! Tap below if WhatsApp didn't open automatically:</p>
+          <a id="wish-wa" class="btn btn-solid" href="https://wa.me/201026710353" target="_blank" rel="noopener noreferrer">Open Groom's WhatsApp <span aria-hidden="true">↗</span></a>
           <button id="wish-copy" class="btn" type="button">Copy message</button>
         </div>
       </div>
@@ -391,11 +403,11 @@
 
 <script>
 (function () {
-  // ---- Setup: WhatsApp number & Private Write-Only Google Apps Script Endpoint ----
-  var WISHES_WHATSAPP = "201026710353"; // +20 102 671 0353
-  var UPLOAD_ENDPOINT_URL = "https://script.google.com/macros/s/AKfycbwWDBMHOtxE0A8xurZ1m6dZfSXsyHNJhGn8S5XKBgP8vR7WU6Sh9eRxo2R83myTEzuS/exec"; // deployed Google Apps Script Web App (/exec) URL
+  // ---- Setup: Groom's WhatsApp number & Private Write-Only Google Apps Script Endpoint ----
+  var WISHES_WHATSAPP = "201026710353"; // Groom's WhatsApp (+20 102 671 0353)
+  var UPLOAD_ENDPOINT_URL = "https://script.google.com/macros/s/AKfycbwWDBMHOtxE0A8xurZ1m6dZfSXsyHNJhGn8S5XKBgP8vR7WU6Sh9eRxo2R83myTEzuS/exec";
   var UPLOAD_INVITE_TOKEN = "HS-2026-PRIVATE"; // Must match INVITE_TOKEN in Code.gs
-  // ---------------------------------------------------------------------------------
+  // -----------------------------------------------------------------------------------------
 
   var root = document.documentElement;
   var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -437,9 +449,9 @@
   document.getElementById('seal').addEventListener('click', openGate);
   document.getElementById('open').addEventListener('click', openGate);
 
-  // Countdown (Cairo is UTC+2 in December)
+  // Countdown (Cairo is UTC+2 in December; 6:30 PM local time)
   var START = Date.parse('2026-04-03T00:00:00+02:00');
-  var WEDDING = Date.parse('2026-12-11T19:00:00+02:00');
+  var WEDDING = Date.parse('2026-12-11T18:30:00+02:00');
   var el = {
     d: document.getElementById('cd-days'), h: document.getElementById('cd-hours'),
     m: document.getElementById('cd-minutes'), s: document.getElementById('cd-seconds'),
@@ -463,31 +475,82 @@
   }
   tick(); setInterval(tick, 1000);
 
-  // Calendar (Google Calendar link; 6:30 PM Cairo = 17:00 UTC)
+  // Calendar (Google Calendar link; 6:30 PM - 8:30 PM Cairo = 16:30 - 18:30 UTC)
   var details = 'Two lives, one beautiful journey. We would be honored to have you with us as we begin our forever.\n\nVenue: Al-Fatah Hall, El-Moshir Tantawy Mosque (قاعة الفتح - مسجد المشير طنطاوي)\nMap: https://maps.app.goo.gl/vFLjbaXzsF9VkrJp8';
   document.getElementById('cal').href = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
     + '&text=' + encodeURIComponent('Hesham & Shorouk — Wedding Reception')
-    + '&dates=20261211T170000Z/20261211T183000Z'
+    + '&dates=20261211T163000Z/20261211T183000Z'
     + '&details=' + encodeURIComponent(details)
     + '&location=' + encodeURIComponent('قاعة الفتح - مسجد المشير طنطاوي, El-Moshir Tantawy Axis, Fifth Settlement, New Cairo, Egypt')
     + '&ctz=Africa/Cairo';
 
-  // Wishes + photos
+  // Wishes (Private Guest Book via Google Sheet OR Direct WhatsApp to Groom)
   var num = (WISHES_WHATSAPP || '').replace(/\D/g, '');
   var form = document.getElementById('wish-form'), out = document.getElementById('wish-out');
-  var wa = document.getElementById('wish-wa'), copyBtn = document.getElementById('wish-copy'), lastText = '';
+  var wa = document.getElementById('wish-wa'), waBtn = document.getElementById('wish-wa-btn');
+  var copyBtn = document.getElementById('wish-copy'), wishSave = document.getElementById('wish-save');
+  var wishStatus = document.getElementById('wish-status'), lastText = '';
+
+  function getWishData() {
+    if (!form || !form.reportValidity()) return null;
+    var name = document.getElementById('wish-name').value.trim().slice(0, 60);
+    var msg = document.getElementById('wish-msg').value.trim().slice(0, 1500);
+    return (name && msg) ? { name: name, msg: msg } : null;
+  }
+
+  // Option A: Save privately to Google Sheet Guest Book (not sent via WhatsApp)
   if (form) {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      var name = document.getElementById('wish-name').value.trim();
-      var msg = document.getElementById('wish-msg').value.trim();
-      if (!name || !msg) return;
-      lastText = 'To Hesham & Shorouk 💍\n\n' + msg + '\n\n— ' + name;
-      var targetWa = num ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(lastText)) : ('https://wa.me/?text=' + encodeURIComponent(lastText));
-      wa.href = targetWa;
-      out.hidden = false;
+      var data = getWishData();
+      if (!data) return;
+      out.hidden = true;
+      wishStatus.hidden = false;
+      wishStatus.textContent = 'Saving your note to our guest book...';
+      wishSave.disabled = true;
+
+      fetch(UPLOAD_ENDPOINT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          type: 'wish',
+          token: UPLOAD_INVITE_TOKEN,
+          guestName: data.name,
+          message: data.msg
+        })
+      }).then(function (r) {
+        return r.json();
+      }).then(function (res) {
+        if (!res || res.ok !== true) {
+          throw new Error((res && res.error) ? res.error : 'Could not save wish.');
+        }
+        wishStatus.textContent = 'Thank you, ' + data.name + '! Your note is saved privately in our guest book (not sent via WhatsApp).';
+        document.getElementById('wish-msg').value = '';
+        wishSave.disabled = false;
+      }).catch(function (err) {
+        wishStatus.textContent = 'Could not save right now: ' + ((err && err.message) ? err.message : 'Please try messaging the groom on WhatsApp instead.');
+        wishSave.disabled = false;
+      });
     });
   }
+
+  // Option B: Send directly to the groom via WhatsApp
+  if (waBtn) {
+    waBtn.addEventListener('click', function () {
+      var data = getWishData();
+      if (!data) return;
+      wishStatus.hidden = true;
+      lastText = 'To Hesham & Shorouk 💍\n\n' + data.msg + '\n\n— ' + data.name;
+      var targetWa = num
+        ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(lastText))
+        : ('https://wa.me/?text=' + encodeURIComponent(lastText));
+      wa.href = targetWa;
+      out.hidden = false;
+      window.open(targetWa, '_blank', 'noopener,noreferrer');
+    });
+  }
+
   if (copyBtn) {
     copyBtn.addEventListener('click', function () {
       function done() { copyBtn.textContent = 'Copied'; setTimeout(function () { copyBtn.textContent = 'Copy message'; }, 1800); }
@@ -496,6 +559,8 @@
       } else { document.getElementById('wish-msg').select(); }
     });
   }
+
+  // Private Photo Upload
   var uploadForm = document.getElementById('photo-upload-form');
   var photoStatus = document.getElementById('photo-status');
   var photoSubmit = document.getElementById('photo-submit');
